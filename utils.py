@@ -66,95 +66,59 @@ def load_data_source(data_source):
     return get_source()
 
 #-------------------------------------------------------------------------------
-def rgb2bgr(tpl):
-    """
-    Convert RGB color tuple to BGR
-    """
-    return (tpl[2], tpl[1], tpl[0])
+def drawSeg(seg):
+
+    FRAME_WIDTH = 512
+    FRAME_HEIGHT = 512
+
+    classesColors = [[0,0,0],[0,255,0],[255,0,0]]
+
+    segColor = np.zeros((FRAME_HEIGHT, FRAME_WIDTH, 3), dtype=np.uint8)
+    segColor[seg[:,:,1] == 1] = classesColors[1]
+    #segColor[seg[:,:,2] == 1] = classesColors[2]
+
+    labels = ['BCG','LIV','LES']
+    cv2.rectangle(segColor, (5,FRAME_HEIGHT-2), (40,FRAME_HEIGHT-40), (255,255,255), -1)
+    for shift in range(len(labels)):
+        cv2.putText(segColor, labels[shift], (10,FRAME_HEIGHT-(shift+1)*12), cv2.FONT_HERSHEY_SIMPLEX, 0.4, classesColors[shift], 1, cv2.LINE_AA, True)
+
+    return np.copy(segColor)
 
 #-------------------------------------------------------------------------------
-def drawFS(img, line, semantics, existence, isRE, gt=False):
-
-    FRAME_WIDTH = 640
-    FRAME_HEIGHT = 256+90
-    NORM_FACTOR = 87.5
-    ORIGINY = 176
-
-    if gt:
-        lineBottomNorm = line[:320]
-        lineHeightNorm = line[320:]
-    else:
-        lineBottomNorm = line[:320]/8
-        lineHeightNorm = line[320:]/16
-
-    lineHeight = ((lineBottomNorm[::2]+lineHeightNorm)*NORM_FACTOR-NORM_FACTOR+ORIGINY).astype(int)+90
-    lineBottom = (lineBottomNorm*NORM_FACTOR-NORM_FACTOR+ORIGINY).astype(int)+90
-
-    x = np.linspace(0,638, 320).astype(int)
-    x160 = np.linspace(0,638, 160).astype(int)
-    y2 = np.full(160,2).astype(int)
-    y8 = np.full(160,8).astype(int)
-    colors = [[0,0,0],[0,255,0],[255,255,0],[255,0,0],[148,0,211],[255,127,0],[80, 208, 255],[102,51,0],[0,0,255]]
-
-    existence = 1/(1+np.exp(-existence)) #Use sigmoid function to convert existence output to probability
-    existenceColormap = (np.squeeze(cv2.applyColorMap((existence*255).astype(np.uint8), cv2.COLORMAP_JET))).astype(int)
-
-    isRE = 1/(1+np.exp(-isRE)) #Use sigmoid function to convert isRE output to probability
-    isREColormap = (np.squeeze(cv2.applyColorMap((isRE*255).astype(np.uint8), cv2.COLORMAP_JET))).astype(int)
-
-    for xLoc in range(320):
-        if np.argmax(semantics[xLoc/2,:]) == 0:
-            lineBottom[xLoc] = 88
-        cv2.drawMarker(img, (x[xLoc],lineBottom[xLoc]), color=colors[np.argmax(semantics[xLoc/2,:])], markerType=cv2.MARKER_SQUARE, markerSize=2, thickness=2)
-    for xLoc in range(160):
-        if np.argmax(semantics[xLoc,:]) == 0:
-            lineHeight[xLoc] = 89
-        cv2.drawMarker(img, (x160[xLoc],lineHeight[xLoc]), color=colors[np.argmax(semantics[xLoc,:])], markerType=cv2.MARKER_STAR, markerSize=4, thickness=1)
-        cv2.drawMarker(img, (x160[xLoc],y2[xLoc]), color=existenceColormap[xLoc], markerType=cv2.MARKER_DIAMOND, markerSize=2, thickness=3)
-        cv2.drawMarker(img, (x160[xLoc],y8[xLoc]), color=isREColormap[xLoc], markerType=cv2.MARKER_DIAMOND, markerSize=2, thickness=3)
-
-    labels = ['noFS','GO','GR','CC','CU','FL','SN','IF','NS']
-    cv2.rectangle(img, (5,FRAME_HEIGHT-2), (35,FRAME_HEIGHT-100), (0,0,0), -1)
-    for shift in range(8):
-        cv2.putText(img, labels[shift+1], (10,FRAME_HEIGHT-(shift+1)*12), cv2.FONT_HERSHEY_SIMPLEX, 0.4, colors[shift+1], 1, cv2.LINE_AA, True)
-
-    return np.copy(img)
-
-#-------------------------------------------------------------------------------
-class PrecisionSummary:
+class MetricsSummary:
     #---------------------------------------------------------------------------
     def __init__(self, session, writer, sample_name, restore=False):
         self.session = session
         self.writer = writer
 
         sess = session
-        ph_name_dist = sample_name+'_distMetric_precision_ph'
-        sum_name_dist = sample_name+'_distMetric_precision'
-        ph_name_sem = sample_name+'_semMetric_precision_ph'
-        sum_name_sem = sample_name+'_semMetric_precision'
-        ph_name_total = sample_name+'_semMetric_precision_ph'
-        sum_name_total = sample_name+'_totalMetric_precision'
+        ph_name_dist = sample_name+'_dice_precision_ph'
+        sum_name_dist = sample_name+'_dice_precision'
+        ph_name_sem = sample_name+'_precision_precision_ph'
+        sum_name_sem = sample_name+'_precision_precision'
+        ph_name_total = sample_name+'_precision_precision_ph'
+        sum_name_total = sample_name+'_recall_precision'
 
-        self.distMetric_placeholder = tf.placeholder(tf.float32, name=ph_name_dist)
-        self.distMetric_summary_op = tf.summary.scalar(sum_name_dist, self.distMetric_placeholder)
-        self.semMetric_placeholder = tf.placeholder(tf.float32, name=ph_name_sem)
-        self.semMetric_summary_op = tf.summary.scalar(sum_name_sem, self.semMetric_placeholder)
-        self.totalMetric_placeholder = tf.placeholder(tf.float32, name=ph_name_total)
-        self.totalMetric_summary_op = tf.summary.scalar(sum_name_total, self.totalMetric_placeholder)
+        self.dice_placeholder = tf.placeholder(tf.float32, name=ph_name_dist)
+        self.dice_summary_op = tf.summary.scalar(sum_name_dist, self.dice_placeholder)
+        self.precision_placeholder = tf.placeholder(tf.float32, name=ph_name_sem)
+        self.precision_summary_op = tf.summary.scalar(sum_name_sem, self.precision_placeholder)
+        self.recall_placeholder = tf.placeholder(tf.float32, name=ph_name_total)
+        self.recall_summary_op = tf.summary.scalar(sum_name_total, self.recall_placeholder)
 
     #---------------------------------------------------------------------------
-    def push(self, epoch, distMetric, semMetric, totalMetric):
+    def push(self, epoch, dice, precision, recall):
 
-        feed = {self.distMetric_placeholder: distMetric}
-        summary = self.session.run(self.distMetric_summary_op, feed_dict=feed)
+        feed = {self.dice_placeholder: dice}
+        summary = self.session.run(self.dice_summary_op, feed_dict=feed)
         self.writer.add_summary(summary, epoch)
 
-        feed = {self.semMetric_placeholder: semMetric}
-        summary = self.session.run(self.semMetric_summary_op, feed_dict=feed)
+        feed = {self.precision_placeholder: precision}
+        summary = self.session.run(self.precision_summary_op, feed_dict=feed)
         self.writer.add_summary(summary, epoch)
 
-        feed = {self.totalMetric_placeholder: totalMetric}
-        summary = self.session.run(self.totalMetric_summary_op, feed_dict=feed)
+        feed = {self.recall_placeholder: recall}
+        summary = self.session.run(self.recall_summary_op, feed_dict=feed)
         self.writer.add_summary(summary, epoch)
 
 #-------------------------------------------------------------------------------
@@ -173,25 +137,22 @@ class ImageSummary:
     #---------------------------------------------------------------------------
     def push(self, epoch, samples):
 
-        FRAME_WIDTH = 640
-        FRAME_HEIGHT = 256+90
+        FRAME_WIDTH = 512
+        FRAME_HEIGHT = 512
+        NUM_OF_CLASSES = 2
+
         imgs = np.zeros((10, FRAME_HEIGHT, FRAME_WIDTH, 3))
 
         for i, sample in enumerate(samples):
-            img = np.concatenate((np.full((90,FRAME_WIDTH),255, dtype=np.uint8), sample[0]), axis=0)
+            img = sample[0].astype(np.uint8)
             imgRGB = np.concatenate([img[:,:,np.newaxis], img[:,:,np.newaxis], img[:,:,np.newaxis]], axis=-1)
-            imgGT = np.copy(imgRGB)
-            imgPred = np.copy(imgRGB)
+            seg = np.copy(sample[1])
 
-            imgGT = drawFS(imgGT, sample[1], sample[2], sample[5], sample[6], True) #GT
-            imgPred = drawFS(imgPred, sample[3], sample[4], sample[5], sample[6]) #Predict
+            segColor = drawSeg(seg) #Predicted labels
 
             alpha = 0.3
-            cv2.addWeighted(imgGT, alpha, imgPred, 1.-alpha, 0, imgRGB)
-            prints = sample[7]
-            cv2.putText(imgRGB, prints, (10,45), cv2.FONT_HERSHEY_DUPLEX, 0.5, [0,0,0], 1, cv2.LINE_AA, True)
+            cv2.addWeighted(segColor, alpha, imgRGB, 1.-alpha, 0, imgRGB)
             imgs[i] = imgRGB[::-1,:,:]
-
 
         feed = {self.img_placeholder: imgs}
         summary = self.session.run(self.img_summary_op, feed_dict=feed)

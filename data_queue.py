@@ -25,25 +25,16 @@ import multiprocessing as mp
 #-------------------------------------------------------------------------------
 class DataQueue:
     #---------------------------------------------------------------------------
-    def __init__(self, frames_template, lines_template, semantics_template, clipNames_template, origins_template, maxsize):
+    def __init__(self, images_template, segs_template, maxsize):
         #-----------------------------------------------------------------------
         # Figure out the data tupes, sizes and shapes of both arrays
         #-----------------------------------------------------------------------
-        self.frames_dtype = frames_template.dtype
-        self.frames_shape = frames_template.shape
-        self.frames_bc = len(frames_template.tobytes())
-        self.lines_dtype = lines_template.dtype
-        self.lines_shape = lines_template.shape
-        self.lines_bc = len(lines_template.tobytes())
-        self.semantics_dtype = semantics_template.dtype
-        self.semantics_shape = semantics_template.shape
-        self.semantics_bc = len(semantics_template.tobytes())
-        self.clipNames_dtype = clipNames_template.dtype
-        self.clipNames_shape = clipNames_template.shape
-        self.clipNames_bc = len(clipNames_template.tobytes())
-        self.origins_dtype = origins_template.dtype
-        self.origins_shape = origins_template.shape
-        self.origins_bc = len(origins_template.tobytes())
+        self.images_dtype = images_template.dtype
+        self.images_shape = images_template.shape
+        self.images_bc = len(images_template.tobytes())
+        self.segs_dtype = segs_template.dtype
+        self.segs_shape = segs_template.shape
+        self.segs_bc = len(segs_template.tobytes())
 
         #-----------------------------------------------------------------------
         # Make an array pool and queue
@@ -51,33 +42,21 @@ class DataQueue:
         self.array_pool = []
         self.array_queue = mp.Queue(maxsize)
         for i in range(maxsize):
-            frames_buff = mp.Array('c', self.frames_bc, lock=False)
-            frames_arr = np.frombuffer(frames_buff, dtype=self.frames_dtype)
-            frames_arr = frames_arr.reshape(self.frames_shape)
+            images_buff = mp.Array('c', self.images_bc, lock=False)
+            images_arr = np.frombuffer(images_buff, dtype=self.images_dtype)
+            images_arr = images_arr.reshape(self.images_shape)
 
-            lines_buff = mp.Array('c', self.lines_bc, lock=False)
-            lines_arr = np.frombuffer(lines_buff, dtype=self.lines_dtype)
-            lines_arr = lines_arr.reshape(self.lines_shape)
+            segs_buff = mp.Array('c', self.segs_bc, lock=False)
+            segs_arr = np.frombuffer(segs_buff, dtype=self.segs_dtype)
+            segs_arr = segs_arr.reshape(self.segs_shape)
 
-            semantics_buff = mp.Array('c', self.semantics_bc, lock=False)
-            semantics_arr = np.frombuffer(semantics_buff, dtype=self.semantics_dtype)
-            semantics_arr = semantics_arr.reshape(self.semantics_shape)
-
-            clipNames_buff = mp.Array('c', self.clipNames_bc, lock=False)
-            clipNames_arr = np.frombuffer(clipNames_buff, dtype=self.clipNames_dtype)
-            clipNames_arr = clipNames_arr.reshape(self.clipNames_shape)
-
-            origins_buff = mp.Array('c', self.origins_bc, lock=False)
-            origins_arr = np.frombuffer(origins_buff, dtype=self.origins_dtype)
-            origins_arr = origins_arr.reshape(self.origins_shape)
-
-            self.array_pool.append((frames_arr, lines_arr, semantics_arr, clipNames_arr, origins_arr))
+            self.array_pool.append((images_arr, segs_arr))
             self.array_queue.put(i)
 
         self.queue = mp.Queue(maxsize)
 
     #---------------------------------------------------------------------------
-    def put(self, frames, lines, semantics, clipNames, origins, *args, **kwargs):
+    def put(self, images, segs, *args, **kwargs):
         #-----------------------------------------------------------------------
         # Check whether the params are consistent with the data we can store
         #-----------------------------------------------------------------------
@@ -94,11 +73,8 @@ class DataQueue:
                 raise ValueError('{}\'s byte count needs to be {} but is {}' \
                                  .format(name, byte_count, len(arr.data)))
 
-        check_consistency('img', frames, self.frames_dtype, self.frames_shape, self.frames_bc)
-        check_consistency('lines', lines, self.lines_dtype, self.lines_shape, self.lines_bc)
-        check_consistency('semantics', semantics, self.semantics_dtype, self.semantics_shape, self.semantics_bc)
-        #check_consistency('clipNames', clipNames, self.clipNames_dtype, self.clipNames_shape, self.clipNames_bc)
-        check_consistency('origins', origins, self.origins_dtype, self.origins_shape, self.origins_bc)
+        check_consistency('img', images, self.images_dtype, self.images_shape, self.images_bc)
+        check_consistency('segs', segs, self.segs_dtype, self.segs_shape, self.segs_bc)
 
         #-----------------------------------------------------------------------
         # If we can not get the slot within timeout we are actually full, not
@@ -112,11 +88,8 @@ class DataQueue:
         #-----------------------------------------------------------------------
         # Copy the arrays into the shared pool
         #-----------------------------------------------------------------------
-        self.array_pool[arr_id][0][:] = frames
-        self.array_pool[arr_id][1][:] = lines
-        self.array_pool[arr_id][2][:] = semantics
-        self.array_pool[arr_id][3][:] = clipNames
-        self.array_pool[arr_id][4][:] = origins
+        self.array_pool[arr_id][0][:] = images
+        self.array_pool[arr_id][1][:] = segs
         self.queue.put((arr_id), *args, **kwargs)
 
     #---------------------------------------------------------------------------
@@ -124,15 +97,12 @@ class DataQueue:
         item = self.queue.get(*args, **kwargs)
         arr_id = item
 
-        frames = np.copy(self.array_pool[arr_id][0])
-        lines = np.copy(self.array_pool[arr_id][1])
-        semantics = np.copy(self.array_pool[arr_id][2])
-        clipNames = np.copy(self.array_pool[arr_id][3])
-        origins = np.copy(self.array_pool[arr_id][4])
+        images = np.copy(self.array_pool[arr_id][0])
+        segs = np.copy(self.array_pool[arr_id][1])
 
         self.array_queue.put(arr_id)
 
-        return frames, lines, semantics, clipNames, origins
+        return images, segs
 
     #---------------------------------------------------------------------------
     def empty(self):

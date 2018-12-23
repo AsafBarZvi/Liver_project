@@ -165,8 +165,8 @@ def main():
         #-----------------------------------------------------------------------
         restore = start_epoch != 0
 
-        #training_metric = PrecisionSummary(sess, summary_writer, 'training', restore)
-        validation_metric = PrecisionSummary(sess, summary_writer, 'validation', restore)
+        #training_metric = MetricsSummary(sess, summary_writer, 'training', restore)
+        validation_metric = MetricsSummary(sess, summary_writer, 'validation', restore)
 
         training_imgs = ImageSummary(sess, summary_writer, 'training', restore)
         validation_imgs = ImageSummary(sess, summary_writer, 'validation', restore)
@@ -203,7 +203,7 @@ def main():
             for idx, (images, gtSegs) in enumerate(tqdm(generator, total=n_train_batches, initial=start_idx, desc=description, unit='batches', leave=False), start=start_idx):
 
                 with timer_dict['train']:
-                    [_, loss, predSegUnet, predSegCrfRnn] = sess.run([train_step, ucrNet.loss, ucrNet.predSegUnet, ucrNet.predSegCrfRnn], feed_dict={ucrNet.image: images, ucrNet.gtSeg: gtSegs})
+                    [_, loss, segPrediction] = sess.run([train_step, ucrNet.loss, ucrNet.segPrediction], feed_dict={ucrNet.image: images, ucrNet.gtSeg: gtSegs})
 
                     #print loss
 
@@ -215,7 +215,7 @@ def main():
                     else:
                         randTrainFrameIdx = 0
                     with timer_dict['summary']:
-                        training_imgs_samples.append((np.copy(images[randTrainFrameIdx,:,:,0]), np.copy(predSegCrfRnn[randTrainFrameIdx,:,:,0])))
+                        training_imgs_samples.append((np.copy(images[randTrainFrameIdx,:,:,0]), np.copy(segPrediction[randTrainFrameIdx,:,:,:])))
 
                     #timerStats()
 
@@ -250,7 +250,7 @@ def main():
                 description = '[i] Valid {:>2}/{}'.format(e+1, args.epochs)
                 for idxTest, (images, gtSegs) in enumerate(tqdm(generator, total=n_valid_batches, desc=description, unit='batches', leave=False)):
 
-                    [loss, predSegUnet, predSegCrfRnn] = sess.run([ucrNet.loss, ucrNet.predSegUnet, ucrNet.predSegCrfRnn], feed_dict={ucrNet.image: images, ucrNet.gtSeg: gtSegs})
+                    [loss, segPrediction] = sess.run([ucrNet.loss, ucrNet.segPrediction], feed_dict={ucrNet.image: images, ucrNet.gtSeg: gtSegs})
 
                     validation_loss.add(loss)
 
@@ -260,7 +260,7 @@ def main():
                         else:
                             randValidFrameIdx = 0
                         with timer_dict['summary']:
-                            validation_imgs_samples.append((np.copy(images[randValidFrameIdx,:,:,0]), np.copy(predSegCrfRnn[randValidFrameIdx,:,:,0])))
+                            validation_imgs_samples.append((np.copy(images[randValidFrameIdx,:,:,0]), np.copy(segPrediction[randValidFrameIdx,:,:,:])))
 
                         #timerStats()
 
