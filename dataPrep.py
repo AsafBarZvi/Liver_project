@@ -29,7 +29,12 @@ class DataPrep:
             valImagesList = [valImagesDir + f for f in os.listdir(valImagesDir) if os.path.isfile(valImagesDir + f)]
             valSegsList = [valSegsDir + f for f in os.listdir(valSegsDir) if os.path.isfile(valSegsDir + f)]
 
-            augSize = 7
+            trainImagesList.sort()
+            trainSegsList.sort()
+            valImagesList.sort()
+            valSegsList.sort()
+
+            augSize = 6
 
             trainSetSize = len(trainImagesList)
             trainSetSize *= augSize
@@ -45,8 +50,8 @@ class DataPrep:
             #-----------------------------------------------------------------------
             # Set the attributes up
             #-----------------------------------------------------------------------
-            self.num_train       = trainSetSize
-            self.num_valid       = valSetSize
+            self.num_train = trainSetSize
+            self.num_valid = valSetSize
 
 
         except Exception as e:
@@ -58,9 +63,9 @@ class DataPrep:
 
         IMAGE_HEIGH = 512
         IMAGE_WIDTH = 512
-        NUM_OF_CLASSES = 2
+        NUM_OF_CLASSES = 3
 
-        augTypes = ['noAug', 'flipLR', 'flipUD', 'blur', 'padding', 'brightness', 'contrast']
+        augTypes = ['noAug', 'flipLR', 'flipUD', 'blur', 'affine', 'contrast']
 
         #-----------------------------------------------------------------------
         def process_samples(offset, batch_size):
@@ -78,6 +83,7 @@ class DataPrep:
                     augName = augTypes[dataIdx % len(augTypes)]
                 else:
                     idx = dataIdx
+                    augName = augTypes[0]
 
                 image = cv2.imread(imagesList[idx])
                 image = image[:,:,0]
@@ -100,21 +106,24 @@ class DataPrep:
                     blurer = iaa.GaussianBlur(1.0)
                     imageAug = blurer.augment_image(image)
                     segAug = seg
-                elif augName == 'padding':
-                    translater = iaa.Affine(translate_percent={"x": (-0.1,0.1), "y": (-0.1,0.1)})
-                    imageAug = translater.augment_image(image)
-                    segAug = translater.augment_image(seg)
-                elif augName == 'brightness':
-                    brightnesser = iaa.Multiply((0.5, 2.0))
-                    imageAug = brightnesser.augment_image(image)
-                    segAug = seg
+                elif augName == 'affine':
+                    affiner = iaa.Affine(scale={"x": (0.8, 1.2), "y": (0.8, 1.2)}, translate_percent={"x": (-0.1, 0.1), "y": (-0.1, 0.1)})
+                    imgSeg = np.concatenate((image[:,:,np.newaxis],seg[:,:,np.newaxis]), axis=2)
+                    imgSegAug = affiner.augment_image(imgSeg)
+                    imageAug = imgSegAug[:,:,0]
+                    segAug = imgSegAug[:,:,1]
+                #elif augName == 'brightness':
+                #    brightnesser = iaa.Multiply((0.5, 2.0))
+                #    imageAug = brightnesser.augment_image(image)
+                #    imageAug[image == 0] = 0
+                #    segAug = seg
                 elif augName == 'contrast':
                     contraster = iaa.ContrastNormalization((0.5, 2.0))
                     imageAug = contraster.augment_image(image)
                     segAug = seg
 
                 labeledSeg = np.zeros((seg.shape[0], seg.shape[1], NUM_OF_CLASSES), dtype=np.float32)
-                #labeledSeg[segAug == 255, 2] = 1
+                labeledSeg[segAug == 255, 2] = 1
                 labeledSeg[segAug == 127, 1] = 1
                 labeledSeg[segAug == 0, 0] = 1
 

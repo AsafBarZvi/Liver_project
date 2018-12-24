@@ -8,16 +8,16 @@ default_config = {
     "weight_decay"      : 0.000005,                     #decay on weights
     "bias_decay"        : 0.0000005,                    #decay on biases
     "snapdir"           : "./snaps",                    #path to save snapshots
-    "epochs"            : 12,                           #number of epoches
+    "epochs"            : 30,                           #number of epoches
     "logdir"            : "logs",                       #tensorboard log dir
-    "summary_interval"  : 20,                          #num of interval to dump summary
-    "val_interval"      : 200,                          #num of interval to dump summary
-    "lr_values"         : "0.001;0.0001;0.00001",       #lr step values
-    "lr_boundaries"     : "10;11",                      #epoches to jump between lr values
+    "summary_interval"  : 200,                          #num of interval to dump summary
+    "val_interval"      : 500,                          #num of interval to dump summary
+    "lr_values"         : "0.0001;0.00001;0.0000001",   #lr step values
+    "lr_boundaries"     : "25;28",                      #epoches to jump between lr values
     "momentum"          : 0.9,                          #momentum
     "continue_training" : False,                        #resume training from latest checkpoint
     "checkpoint_file"   : None,                         #resume from specific ckpt file
-    "num_workers"       : 0,                            #data feed pipeline workers
+    "num_workers"       : 3,                            #data feed pipeline workers
     "max_snapshots_keep": 10,                           #max snaps to keep 0 means all
     "output_dir"        : "infer_out"                   #detections images output path
 

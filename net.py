@@ -53,7 +53,7 @@ class UnetCrfRnn:
     def __init__(self, batch_size, wd=0.000005, bd=0.0000005):
 
         self.batch_size = batch_size
-        self.num_classes = 2
+        self.num_classes = 3
         self.wreg = tf.contrib.layers.l2_regularizer(wd)
         self.breg = tf.contrib.layers.l2_regularizer(bd)
 
@@ -73,12 +73,12 @@ class UnetCrfRnn:
             def conv2d(inData, outChannels, kerSize, strid, layerName):
                 if kerSize == 3:
                     inData = tf.pad(inData, [[0, 0], [1, 1], [1, 1], [0, 0]], 'CONSTANT')
-                outData = tf.layers.conv2d(inData, outChannels, kerSize, strid, name=layerName, reuse=False, activation=tf.nn.relu, padding='valid', kernel_regularizer=self.wreg, bias_regularizer=self.breg)
+                outData = tf.layers.conv2d(inData, outChannels, kerSize, strid, name=layerName, reuse=False, activation=tf.nn.elu, padding='valid', kernel_regularizer=self.wreg, bias_regularizer=self.breg)
                 _activation_summary(outData)
                 return outData
 
             def deconv2dAndConcat(inData, concatData, outChannels, kerSize, strid, layerName):
-                outData = tf.layers.conv2d_transpose(inData, outChannels, kerSize, strid, name=layerName, reuse=False, activation=tf.nn.relu, padding='same', kernel_regularizer=self.wreg, bias_regularizer=self.breg)
+                outData = tf.layers.conv2d_transpose(inData, outChannels, kerSize, strid, name=layerName, reuse=False, activation=tf.nn.elu, padding='same', kernel_regularizer=self.wreg, bias_regularizer=self.breg)
                 _activation_summary(outData)
                 outData = tf.concat([outData, concatData], axis=-1)
                 return outData
@@ -120,9 +120,9 @@ class UnetCrfRnn:
 
         with tf.variable_scope("CrfRnn"):
 
-            theta_alpha = 50
-            theta_beta = 25
-            theta_gamma = 50
+            theta_alpha = 50.
+            theta_beta = 3.
+            theta_gamma = 10.
             num_iterations = 5
             self.crfrnnOut = crf_rnn_layer(unaries = self.unetOut,
                                    reference_image = self.image,
@@ -136,7 +136,8 @@ class UnetCrfRnn:
         with tf.variable_scope("result"):
 
             self.segProbability = tf.nn.softmax(self.crfrnnOut)
-            self.segPrediction = tf.round(self.segProbability)
+            #self.segProbability = tf.nn.softmax(self.unetOut)
+            self.segPrediction = tf.argmax(self.segProbability, axis=3)
 
             self.result = {
                     'segProb': self.segProbability,
@@ -149,10 +150,15 @@ class UnetCrfRnn:
         #-----------------------------------------------------------------------
         with tf.variable_scope("loss"):
 
-
             logits = tf.reshape(self.crfrnnOut, (-1, self.num_classes))
+            #logits = tf.reshape(self.unetOut, (-1, self.num_classes))
             labels = tf.reshape(self.gtSeg, (-1, self.num_classes))
+
+            #classesWeights = tf.constant([[1., 1., 2.]])
+            #weights = tf.reduce_sum(classesWeights * labels, axis=1)
+
             loss = tf.nn.softmax_cross_entropy_with_logits_v2(labels=labels, logits=logits)
+            #loss = loss * weights
             self.loss = tf.reduce_sum(loss, name='CrossEntropyLoss')
             _variable_summaries(self.loss)
 

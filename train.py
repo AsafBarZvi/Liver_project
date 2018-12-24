@@ -4,6 +4,7 @@ import os
 import shutil
 import tensorflow as tf
 import numpy as np
+import random
 from dataPrep import DataPrep
 from utils import *
 from tqdm import tqdm
@@ -197,15 +198,13 @@ def main():
             #-------------------------------------------------------------------
             # Train
             #-------------------------------------------------------------------
-            randTrainBatchIdx = np.random.randint(0, args.summary_interval-2, 10)
+            randTrainBatchIdx = random.sample(range(args.summary_interval-1), 10)
             generator = dp.train_generator(args.batch_size, args.num_workers)
             description = '[i] Train {:>2}/{}'.format(e+1, args.epochs)
             for idx, (images, gtSegs) in enumerate(tqdm(generator, total=n_train_batches, initial=start_idx, desc=description, unit='batches', leave=False), start=start_idx):
 
                 with timer_dict['train']:
                     [_, loss, segPrediction] = sess.run([train_step, ucrNet.loss, ucrNet.segPrediction], feed_dict={ucrNet.image: images, ucrNet.gtSeg: gtSegs})
-
-                    #print loss
 
                 training_loss.add(loss)
 
@@ -215,7 +214,7 @@ def main():
                     else:
                         randTrainFrameIdx = 0
                     with timer_dict['summary']:
-                        training_imgs_samples.append((np.copy(images[randTrainFrameIdx,:,:,0]), np.copy(segPrediction[randTrainFrameIdx,:,:,:])))
+                        training_imgs_samples.append((np.copy(images[randTrainFrameIdx,:,:,0]), np.copy(segPrediction[randTrainFrameIdx,:,:]), np.copy(gtSegs[randTrainFrameIdx,:,:,:])))
 
                     #timerStats()
 
@@ -237,7 +236,7 @@ def main():
 
                 summary_writer.flush()
 
-                randTrainBatchIdx = np.random.randint(idx+1, idx+args.summary_interval-2, 10)
+                randTrainBatchIdx = random.sample(range(idx+1, idx+args.summary_interval-1), 10)
 
                 #-------------------------------------------------------------------
                 # Validate
@@ -245,7 +244,7 @@ def main():
                 if (iteration % args.val_interval) != 0:
                     continue
 
-                randValidBatchIdx = np.random.randint(0, n_valid_batches-1, 10)
+                randValidBatchIdx = random.sample(range(n_valid_batches-1), 10)
                 generator = dp.valid_generator(args.batch_size, args.num_workers)
                 description = '[i] Valid {:>2}/{}'.format(e+1, args.epochs)
                 for idxTest, (images, gtSegs) in enumerate(tqdm(generator, total=n_valid_batches, desc=description, unit='batches', leave=False)):
@@ -260,7 +259,7 @@ def main():
                         else:
                             randValidFrameIdx = 0
                         with timer_dict['summary']:
-                            validation_imgs_samples.append((np.copy(images[randValidFrameIdx,:,:,0]), np.copy(segPrediction[randValidFrameIdx,:,:,:])))
+                            validation_imgs_samples.append((np.copy(images[randValidFrameIdx,:,:,0]), np.copy(segPrediction[randValidFrameIdx,:,:]), np.copy(gtSegs[randValidFrameIdx,:,:,:])))
 
                         #timerStats()
 

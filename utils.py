@@ -66,19 +66,21 @@ def load_data_source(data_source):
     return get_source()
 
 #-------------------------------------------------------------------------------
-def drawSeg(seg):
+def drawSeg(seg, segGT):
 
     FRAME_WIDTH = 512
     FRAME_HEIGHT = 512
 
-    classesColors = [[0,0,0],[0,255,0],[255,0,0]]
+    classesColors = [[0,0,0],[0,255,0],[255,0,0],[255,255,0],[0,0,255]]
 
     segColor = np.zeros((FRAME_HEIGHT, FRAME_WIDTH, 3), dtype=np.uint8)
-    segColor[seg[:,:,1] == 1] = classesColors[1]
-    #segColor[seg[:,:,2] == 1] = classesColors[2]
+    segColor[segGT[:,:,1] == 1] = classesColors[3]
+    segColor[seg == 1] = classesColors[1]
+    segColor[segGT[:,:,2] == 1] = classesColors[4]
+    segColor[seg == 2] = classesColors[2]
 
-    labels = ['BCG','LIV','LES']
-    cv2.rectangle(segColor, (5,FRAME_HEIGHT-2), (40,FRAME_HEIGHT-40), (255,255,255), -1)
+    labels = ['BCG','LIV','LES','LIVgt','LESgt']
+    cv2.rectangle(segColor, (5,FRAME_HEIGHT-2), (45,FRAME_HEIGHT-70), (255,255,255), -1)
     for shift in range(len(labels)):
         cv2.putText(segColor, labels[shift], (10,FRAME_HEIGHT-(shift+1)*12), cv2.FONT_HERSHEY_SIMPLEX, 0.4, classesColors[shift], 1, cv2.LINE_AA, True)
 
@@ -139,7 +141,6 @@ class ImageSummary:
 
         FRAME_WIDTH = 512
         FRAME_HEIGHT = 512
-        NUM_OF_CLASSES = 2
 
         imgs = np.zeros((10, FRAME_HEIGHT, FRAME_WIDTH, 3))
 
@@ -147,8 +148,9 @@ class ImageSummary:
             img = sample[0].astype(np.uint8)
             imgRGB = np.concatenate([img[:,:,np.newaxis], img[:,:,np.newaxis], img[:,:,np.newaxis]], axis=-1)
             seg = np.copy(sample[1])
+            segGT = np.copy(sample[2])
 
-            segColor = drawSeg(seg) #Predicted labels
+            segColor = drawSeg(seg, segGT) #Predicted labels
 
             alpha = 0.3
             cv2.addWeighted(segColor, alpha, imgRGB, 1.-alpha, 0, imgRGB)
