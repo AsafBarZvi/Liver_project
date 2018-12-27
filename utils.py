@@ -89,39 +89,46 @@ def drawSeg(seg, segGT):
 #-------------------------------------------------------------------------------
 class MetricsSummary:
     #---------------------------------------------------------------------------
-    def __init__(self, session, writer, sample_name, restore=False):
+    def __init__(self, session, writer, metrics_names, num_samples):
         self.session = session
         self.writer = writer
+        self.num_samples = num_samples
+        self.metrics_namess = metrics_names
+        self.metric_values = {}
+        self.placeholders = {}
 
         sess = session
-        ph_name_dist = sample_name+'_dice_precision_ph'
-        sum_name_dist = sample_name+'_dice_precision'
-        ph_name_sem = sample_name+'_precision_precision_ph'
-        sum_name_sem = sample_name+'_precision_precision'
-        ph_name_total = sample_name+'_precision_precision_ph'
-        sum_name_total = sample_name+'_recall_precision'
 
-        self.dice_placeholder = tf.placeholder(tf.float32, name=ph_name_dist)
-        self.dice_summary_op = tf.summary.scalar(sum_name_dist, self.dice_placeholder)
-        self.precision_placeholder = tf.placeholder(tf.float32, name=ph_name_sem)
-        self.precision_summary_op = tf.summary.scalar(sum_name_sem, self.precision_placeholder)
-        self.recall_placeholder = tf.placeholder(tf.float32, name=ph_name_total)
-        self.recall_summary_op = tf.summary.scalar(sum_name_total, self.recall_placeholder)
+        summary_ops = []
+        for metric in self.metrics_namess:
+            sum_name = metric + '_metric'
+            ph_name = metric + '_metric_ph'
+
+            placeholder = tf.placeholder(tf.float32, name=ph_name)
+            summary_op = tf.summary.scalar(sum_name, placeholder)
+
+            self.metric_values[metric] = float(0)
+            self.placeholders[metric] = placeholder
+            summary_ops.append(summary_op)
+
+        self.summary_ops = tf.summary.merge(summary_ops)
 
     #---------------------------------------------------------------------------
-    def push(self, epoch, dice, precision, recall):
+    def add(self, values):
+        for idx, metric in enumerate(self.metrics_namess):
+            self.metric_values[metric] += values[idx]
 
-        feed = {self.dice_placeholder: dice}
-        summary = self.session.run(self.dice_summary_op, feed_dict=feed)
+    #---------------------------------------------------------------------------
+    def push(self, epoch):
+        feed = {}
+        for metric in self.metrics_namess:
+            feed[self.placeholders[metric]] = self.metric_values[metric]/self.num_samples
+
+        summary = self.session.run(self.summary_ops, feed_dict=feed)
         self.writer.add_summary(summary, epoch)
 
-        feed = {self.precision_placeholder: precision}
-        summary = self.session.run(self.precision_summary_op, feed_dict=feed)
-        self.writer.add_summary(summary, epoch)
-
-        feed = {self.recall_placeholder: recall}
-        summary = self.session.run(self.recall_summary_op, feed_dict=feed)
-        self.writer.add_summary(summary, epoch)
+        for metric in self.metrics_namess:
+            self.metric_values[metric] = float(0)
 
 #-------------------------------------------------------------------------------
 class ImageSummary:

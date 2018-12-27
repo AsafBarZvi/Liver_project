@@ -10,7 +10,9 @@ from utils import *
 from tqdm import tqdm
 from timer import timer_dict, timerStats
 from default import config, printCfg
+from metrics import lp_metrics
 import net
+#import net_onlyUnet as net
 #import ipdb
 
 config.__dict__.update()
@@ -39,13 +41,13 @@ def compute_lr(lr_values, lr_boundaries):
     return lr, global_step
 
 #-------------------------------------------------------------------------------
-def main():
+def train(train_data_dir, val_data_dir, out_weight_dir):
     #---------------------------------------------------------------------------
     # Parse the commandline
     #---------------------------------------------------------------------------
     args = config
 
-    snaps_path = os.path.join(config.snapdir , config.name)
+    snaps_path = os.path.join(out_weight_dir , config.name)
     #---------------------------------------------------------------------------
     # Find an existing checkpoint
     #---------------------------------------------------------------------------
@@ -86,7 +88,7 @@ def main():
     #---------------------------------------------------------------------------
     print('[i] Configuring the training data...')
     try:
-        dp = DataPrep(args.data_dir)
+        dp = DataPrep(train_data_dir, val_data_dir)
         print('[i] # training samples: {}'.format(dp.num_train))
         print('[i] # validation samples: {}'.format(dp.num_valid))
         print('[i] # batch size train: {}'.format(args.batch_size))
@@ -159,21 +161,28 @@ def main():
         merged_summary = tf.summary.merge_all()
         summary_writer = tf.summary.FileWriter(os.path.join(args.logdir , config.name), sess.graph)
 
-        #validation_metric_calc = analyze_results.CalculateMetrics(args.batch_size)
-
         #-----------------------------------------------------------------------
         # Summaries
         #-----------------------------------------------------------------------
         restore = start_epoch != 0
 
-        #training_metric = MetricsSummary(sess, summary_writer, 'training', restore)
-        validation_metric = MetricsSummary(sess, summary_writer, 'validation', restore)
+        #training_metric = MetricsSummary(sess, summary_writer, ['dice', 'precision', 'recall', 'accuracy'], 1)
+        validation_metric_liv = MetricsSummary(sess, summary_writer, ['diceLiv', 'precisionLiv', 'recallLiv', 'accuracyLiv'], 1)
+        validation_metric_les = MetricsSummary(sess, summary_writer, ['diceLes', 'precisionLes', 'recallLes', 'accuracyLes'], 1)
 
         training_imgs = ImageSummary(sess, summary_writer, 'training', restore)
         validation_imgs = ImageSummary(sess, summary_writer, 'validation', restore)
 
         training_loss = LossSummary(sess, summary_writer, 'training', args.summary_interval)
         validation_loss = LossSummary(sess, summary_writer, 'validation', n_valid_batches)
+
+        #---------------------------------------------------------------------------
+        # metrics initilazing
+        #---------------------------------------------------------------------------
+        #metricsTrainLiver = lp_metrics()
+        #metricsTrainLesion = lp_metrics()
+        metricsTestLiver = lp_metrics()
+        metricsTestLesion = lp_metrics()
 
         #-----------------------------------------------------------------------
         # Get the initial snapshot of the network
@@ -252,6 +261,12 @@ def main():
                     [loss, segPrediction] = sess.run([ucrNet.loss, ucrNet.segPrediction], feed_dict={ucrNet.image: images, ucrNet.gtSeg: gtSegs})
 
                     validation_loss.add(loss)
+                    liverPrediction = np.zeros((segPrediction.shape), dtype=np.float32)
+                    liverPrediction[segPrediction == 1] = 1
+                    metricsTestLiver.calc_metrics(gtSegs[:,:,:,1], liverPrediction)
+                    lesionPrediction = np.zeros((segPrediction.shape), dtype=np.float32)
+                    lesionPrediction[segPrediction == 2] = 1
+                    metricsTestLesion.calc_metrics(gtSegs[:,:,:,2], lesionPrediction)
 
                     if idxTest in randValidBatchIdx:
                         if args.batch_size > 1:
@@ -272,7 +287,13 @@ def main():
                                                               ucrNet.gtSeg: gtSegs})
                 summary_writer.add_summary(summary, iteration)
 
-                #validation_metric.push(iteration, precision, recall, Dice)
+                metricsRes = metricsTestLiver.summarize_metrics()
+                validation_metric_liv.add([metricsRes['dice'], metricsRes['precision'], metricsRes['recall'], metricsRes['accuracy']])
+                validation_metric_liv.push(iteration)
+
+                metricsRes = metricsTestLesion.summarize_metrics()
+                validation_metric_les.add([metricsRes['dice'], metricsRes['precision'], metricsRes['recall'], metricsRes['accuracy']])
+                validation_metric_les.push(iteration)
 
                 validation_imgs.push(iteration, validation_imgs_samples)
                 validation_imgs_samples = []
@@ -295,8 +316,190 @@ def main():
         checkpoint = '{}/final.ckpt'.format(snaps_path)
         model_saver.save(sess, checkpoint)
         print('[i] Checkpoint saved:' + checkpoint)
+        print('[i] Done training...')
 
     return 0
 
+
+def predict(test_data_dir, weights_path, out_seg_dir):
+    #---------------------------------------------------------------------------
+    # Parse the commandline
+    #---------------------------------------------------------------------------
+    args = config
+
+    #---------------------------------------------------------------------------
+    # Find an existing checkpoint
+    #---------------------------------------------------------------------------
+    checkpoint_file = weights_path
+
+    if checkpoint_file is None:
+        print('[!] No checkpoints found, cannot continue!')
+        return 1
+
+    #---------------------------------------------------------------------------
+    # Configure the training data
+    #---------------------------------------------------------------------------
+    print('[i] Configuring the test data...')
+    try:
+        dp = DataPrep(test_data_dir, test_data_dir, args.testData)
+        print('[i] # test samples: {}'.format(dp.num_valid))
+        print('[i] # batch size train: {}'.format(args.batch_size))
+    except (AttributeError, RuntimeError) as e:
+        print('[!] Unable to load data: ' + str(e))
+        return 1
+
+    #---------------------------------------------------------------------------
+    # Create the network
+    #---------------------------------------------------------------------------
+    with tf.Session() as sess:
+        print('[i] Uploading the model...')
+        n_valid_batches = int(math.ceil(dp.num_valid/args.batch_size))
+        ucrNet = net.UnetCrfRnn(args.batch_size, args.weight_decay, args.bias_decay)
+
+        init = tf.global_variables_initializer()
+        init_local = tf.local_variables_initializer()
+        sess.run(init)
+        sess.run(init_local)
+
+        if not checkpoint_file is None:
+            try:
+                initialize_variables_from_ckpt(sess, checkpoint_file)
+                #saver = tf.train.Saver()
+                #saver.restore(sess, checkpoint_file)
+            except Exception as E:
+                print E
+
+        #-----------------------------------------------------------------------
+        # Create various helpers
+        #-----------------------------------------------------------------------
+        if not os.path.exists(args.logdir):
+            os.mkdir(args.logdir)
+        if os.path.exists(os.path.join(args.logdir , config.name)):
+            shutil.rmtree(os.path.join(args.logdir , config.name))
+            os.mkdir(os.path.join(args.logdir , config.name))
+        else:
+            os.mkdir(os.path.join(args.logdir , config.name))
+
+        if not os.path.exists(out_seg_dir):
+            os.mkdir(out_seg_dir)
+
+        merged_summary = tf.summary.merge_all()
+        summary_writer = tf.summary.FileWriter(os.path.join(args.logdir , config.name), sess.graph)
+
+        #-----------------------------------------------------------------------
+        # Summaries
+        #-----------------------------------------------------------------------
+        validation_metric_liv = MetricsSummary(sess, summary_writer, ['diceLiv', 'precisionLiv', 'recallLiv', 'accuracyLiv'], 1)
+        validation_metric_les = MetricsSummary(sess, summary_writer, ['diceLes', 'precisionLes', 'recallLes', 'accuracyLes'], 1)
+        validation_imgs = ImageSummary(sess, summary_writer, 'validation')
+        validation_loss = LossSummary(sess, summary_writer, 'validation', n_valid_batches)
+
+        #---------------------------------------------------------------------------
+        # metrics initilazing
+        #---------------------------------------------------------------------------
+        #metricsTrainLiver = lp_metrics()
+        #metricsTrainLesion = lp_metrics()
+        metricsTestLiver = lp_metrics()
+        metricsTestLesion = lp_metrics()
+
+        #-------------------------------------------------------------------
+        # Validate
+        #-------------------------------------------------------------------
+        iteration = 0
+        validation_imgs_samples = []
+        randValidBatchIdx = random.sample(range(n_valid_batches-1), 10)
+        generator = dp.valid_generator(args.batch_size, args.num_workers)
+        description = '[i] Valid '
+        for idxTest, (images, gtSegs) in enumerate(tqdm(generator, total=n_valid_batches, desc=description, unit='batches', leave=False)):
+
+            if args.testData:
+                [segPrediction] = sess.run([ucrNet.segPrediction], feed_dict={ucrNet.image: images})
+            else:
+                [loss, segPrediction] = sess.run([ucrNet.loss, ucrNet.segPrediction], feed_dict={ucrNet.image: images, ucrNet.gtSeg: gtSegs})
+
+                validation_loss.add(loss)
+                liverPrediction = np.zeros((segPrediction.shape), dtype=np.float32)
+                liverPrediction[segPrediction == 1] = 1
+                metricsTestLiver.calc_metrics(gtSegs[:,:,:,1], liverPrediction)
+                lesionPrediction = np.zeros((segPrediction.shape), dtype=np.float32)
+                lesionPrediction[segPrediction == 2] = 1
+                metricsTestLesion.calc_metrics(gtSegs[:,:,:,2], lesionPrediction)
+
+                if idxTest in randValidBatchIdx:
+                    if args.batch_size > 1:
+                        randValidFrameIdx = np.random.randint(0,args.batch_size-1,1)[0]
+                    else:
+                        randValidFrameIdx = 0
+                    with timer_dict['summary']:
+                        validation_imgs_samples.append((np.copy(images[randValidFrameIdx,:,:,0]), np.copy(segPrediction[randValidFrameIdx,:,:]), np.copy(gtSegs[randValidFrameIdx,:,:,:])))
+
+                    #timerStats()
+
+            #-------------------------------------------------------------------
+            # Dump segmented images
+            #-------------------------------------------------------------------
+            for segNum in range(gtSegs.shape[0]):
+                segToSave = np.zeros((segPrediction.shape[1], segPrediction.shape[2]), dtype=np.uint8)
+                segToSave[segPrediction[segNum] == 1] = 127
+                segToSave[segPrediction[segNum] == 2] = 255
+                cv2.imwrite('{}/{}.png'.format(out_seg_dir, idxTest*gtSegs.shape[0]+segNum), segToSave)
+
+        #-------------------------------------------------------------------
+        # Write summaries
+        #-------------------------------------------------------------------
+        if not args.testData:
+
+            validation_loss.push(iteration)
+
+            summary = sess.run(merged_summary, feed_dict={ucrNet.image: images,
+                                                          ucrNet.gtSeg: gtSegs})
+            summary_writer.add_summary(summary, iteration)
+
+            metricsRes = metricsTestLiver.summarize_metrics()
+            validation_metric_liv.add([metricsRes['dice'], metricsRes['precision'], metricsRes['recall'], metricsRes['accuracy']])
+            validation_metric_liv.push(iteration)
+            print "Liver segmentation results: {}".format(metricsRes)
+
+            metricsRes = metricsTestLesion.summarize_metrics()
+            validation_metric_les.add([metricsRes['dice'], metricsRes['precision'], metricsRes['recall'], metricsRes['accuracy']])
+            validation_metric_les.push(iteration)
+            print "Lesion segmentation results: {}".format(metricsRes)
+
+            validation_imgs.push(iteration, validation_imgs_samples)
+            validation_imgs_samples = []
+
+            summary_writer.flush()
+
+        print('[i] Done testing...')
+
+
+    return 0
+
+
+
 if __name__ == '__main__':
-    sys.exit(main())
+
+    key = raw_input("Please type: train only - 1, both train and predict - 2, predict only - 3\n")
+    if key < 3:
+        train_data_dir = config.train_data_dir
+        val_data_dir = config.val_data_dir
+        out_weight_dir = config.snapdir
+
+        tf.reset_default_graph()
+        status = train(train_data_dir, val_data_dir, out_weight_dir)
+        if status == 1:
+            sys.exit(status)
+
+    if key > 1:
+        test_data_dir = config.val_data_dir
+        weights_path = config.checkpoint_file
+        out_seg_dir = config.out_seg_dir
+
+        tf.reset_default_graph()
+        status = predict(test_data_dir, weights_path, out_seg_dir)
+        if status == 1:
+            sys.exit(status)
+
+
+
+
