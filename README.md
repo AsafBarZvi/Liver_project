@@ -4,7 +4,7 @@ This network performing semantic segmentation on CT scans for Liver and Lesion a
 
 # Running the network
 
-- It possible to change the permutohedral lattice filter setup in the build.sh file. To build the library,change the environment varible paths
+- It's possible to change the permutohedral lattice filter setup in the build.sh file. To build the library,change the environment varible paths
 - To run the network, use: python live_project.py <runName>, then you'll be asked to choose between prediction/train or both
 - The file default.py contain all the evaluation/train setups such as the batch size, train/validation data paths etc.
 - To run prediction on test data, change in default.py the 'testData' key value to True, along with the correct 'val_data_dir' path
