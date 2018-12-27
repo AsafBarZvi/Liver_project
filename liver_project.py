@@ -299,6 +299,8 @@ def train(train_data_dir, val_data_dir, out_weight_dir):
                 validation_imgs_samples = []
 
                 summary_writer.flush()
+                metricsTestLiver.__init__()
+                metricsTestLesion.__init__()
 
                 #-------------------------------------------------------------------
                 # Save a checktpoint
@@ -313,7 +315,7 @@ def train(train_data_dir, val_data_dir, out_weight_dir):
         # Save final checktpoint
         #-------------------------------------------------------------------
         timerStats()
-        checkpoint = '{}/final.ckpt'.format(snaps_path)
+        checkpoint = '{}/weights_final.ckpt'.format(snaps_path)
         model_saver.save(sess, checkpoint)
         print('[i] Checkpoint saved:' + checkpoint)
         print('[i] Done training...')
@@ -330,7 +332,7 @@ def predict(test_data_dir, weights_path, out_seg_dir):
     #---------------------------------------------------------------------------
     # Find an existing checkpoint
     #---------------------------------------------------------------------------
-    checkpoint_file = weights_path
+    checkpoint_file = weights_path + '/weights_final.ckpt'
 
     if checkpoint_file is None:
         print('[!] No checkpoints found, cannot continue!')
@@ -479,7 +481,7 @@ def predict(test_data_dir, weights_path, out_seg_dir):
 
 if __name__ == '__main__':
 
-    key = raw_input("Please type: train only - 1, both train and predict - 2, predict only - 3\n")
+    key = int(raw_input("Please type: train only - 1, both train and predict - 2, predict only - 3\n"))
     if key < 3:
         train_data_dir = config.train_data_dir
         val_data_dir = config.val_data_dir
@@ -492,7 +494,10 @@ if __name__ == '__main__':
 
     if key > 1:
         test_data_dir = config.val_data_dir
-        weights_path = config.checkpoint_file
+        if key == 2:
+            weights_path = config.snapdir + '/' + config.name
+        else:
+            weights_path = config.weight_path_test
         out_seg_dir = config.out_seg_dir
 
         tf.reset_default_graph()
