@@ -332,7 +332,7 @@ def predict(test_data_dir, weights_path, out_seg_dir):
     #---------------------------------------------------------------------------
     # Find an existing checkpoint
     #---------------------------------------------------------------------------
-    checkpoint_file = weights_path + '/weights_final.ckpt'
+    checkpoint_file = weights_path + 'weights_final.ckpt'
 
     if checkpoint_file is None:
         print('[!] No checkpoints found, cannot continue!')
