@@ -137,12 +137,15 @@ class UnetCrfRnn:
 
             self.segProbability = tf.nn.softmax(self.crfrnnOut)
             #self.segProbability = tf.nn.softmax(self.unetOut)
-            self.segPrediction = tf.argmax(self.segProbability, axis=3)
+            segPrediction = tf.argmax(self.segProbability, axis=3)
+            segPredictionVal = tf.reduce_max(self.segProbability, axis=3)
+            self.segPrediction = tf.where(tf.less(segPredictionVal, 0.5), tf.zeros(segPrediction.shape, dtype=tf.int64), segPrediction)
 
             self.result = {
                     'segProb': self.segProbability,
                     'segPred': self.segPrediction
                     }
+
 
 
         #-----------------------------------------------------------------------

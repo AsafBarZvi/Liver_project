@@ -19,9 +19,23 @@ class lp_metrics():
         self.fn_val += np.sum(np.logical_and(pred_labels == 0, true_labels == 1))
 
     def summarize_metrics(self):
+        #if self.fn_val+self.fp_val+2*self.tp_val == 0:
+        #    dice = 0
+        #else:
+        #    dice = 2*self.tp_val/(self.fn_val+self.fp_val+2*self.tp_val)
+        #if self.tp_val+self.fp_val == 0:
+        #    precision = 0
+        #else:
+        #    precision = self.tp_val/(self.tp_val+self.fp_val)
+        #if self.tp_val+self.fn_val == 0:
+        #    recall = 0
+        #else:
+        #    recall = self.tp_val/(self.tp_val+self.fn_val)
+
         dice = 2*self.tp_val/(self.fn_val+self.fp_val+2*self.tp_val)
         precision = self.tp_val/(self.tp_val+self.fp_val)
         recall = self.tp_val/(self.tp_val+self.fn_val)
+
         accuracy = (self.tp_val + self.tn_val) / (self.tp_val+self.tn_val+self.fp_val+self.fn_val)
 
         self.results['dice'] = dice

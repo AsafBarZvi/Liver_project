@@ -14,22 +14,16 @@ from imgaug import augmenters as iaa
 
 class DataPrep:
     #---------------------------------------------------------------------------
-    def __init__(self, dataDirTrain, dataDirVal, testData=False):
+    def __init__(self, dataDirTrain, dataDirVal):
         #-----------------------------------------------------------------------
         # Prepare the dataset info
         #-----------------------------------------------------------------------
         try:
 
-            if testData:
-                trainImagesDir = dataDirTrain + '/'
-                trainSegsDir = dataDirTrain + '/'
-                valImagesDir = dataDirVal + '/'
-                valSegsDir = dataDirVal + '/'
-            else:
-                trainImagesDir = dataDirTrain + '/ct/'
-                trainSegsDir = dataDirTrain + '/seg/'
-                valImagesDir = dataDirVal + '/ct/'
-                valSegsDir = dataDirVal + '/seg/'
+            trainImagesDir = dataDirTrain + '/ct/'
+            trainSegsDir = dataDirTrain + '/seg/'
+            valImagesDir = dataDirVal + '/ct/'
+            valSegsDir = dataDirVal + '/seg/'
 
             trainImagesList = [trainImagesDir + f for f in os.listdir(trainImagesDir) if os.path.isfile(trainImagesDir + f)]
             trainSegsList = [trainSegsDir + f for f in os.listdir(trainSegsDir) if os.path.isfile(trainSegsDir + f)]
@@ -51,8 +45,8 @@ class DataPrep:
             randIdxs = range(trainSetSize)
             shuffle(randIdxs)
 
-            self.train_generator = self.__batch_generator(trainImagesList, trainSegsList, trainSetSize, randIdxs, augSize, True, False)
-            self.valid_generator = self.__batch_generator(valImagesList, valSegsList, valSetSize, False, testData)
+            self.train_generator = self.__batch_generator(trainImagesList, trainSegsList, trainSetSize, randIdxs, augSize, True)
+            self.valid_generator = self.__batch_generator(valImagesList, valSegsList, valSetSize)
 
             #-----------------------------------------------------------------------
             # Set the attributes up
@@ -66,7 +60,7 @@ class DataPrep:
 
 
     #---------------------------------------------------------------------------
-    def __batch_generator(self, imagesList, segsList, setSize, randIdxs=[], augSize=1, train=False, testData=False):
+    def __batch_generator(self, imagesList, segsList, setSize, randIdxs=[], augSize=1, train=False):
 
         IMAGE_HEIGH = 512
         IMAGE_WIDTH = 512
@@ -130,10 +124,9 @@ class DataPrep:
                     segAug = seg
 
                 labeledSeg = np.zeros((seg.shape[0], seg.shape[1], NUM_OF_CLASSES), dtype=np.float32)
-                if not testData:
-                    labeledSeg[segAug == 255, 2] = 1
-                    labeledSeg[segAug == 127, 1] = 1
-                    labeledSeg[segAug == 0, 0] = 1
+                labeledSeg[segAug == 255, 2] = 1
+                labeledSeg[segAug == 127, 1] = 1
+                labeledSeg[segAug == 0, 0] = 1
 
                 if first:
                     images = imageAug[np.newaxis,:,:,np.newaxis].astype(np.float32)

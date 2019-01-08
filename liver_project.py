@@ -1,10 +1,12 @@
 import math
 import sys
 import os
+import re
 import shutil
 import tensorflow as tf
 import numpy as np
 import random
+import cv2
 from dataPrep import DataPrep
 from utils import *
 from tqdm import tqdm
@@ -342,20 +344,26 @@ def predict(test_data_dir, weights_path, out_seg_dir):
     # Configure the training data
     #---------------------------------------------------------------------------
     print('[i] Configuring the test data...')
-    try:
-        dp = DataPrep(test_data_dir, test_data_dir, args.testData)
-        print('[i] # test samples: {}'.format(dp.num_valid))
-        print('[i] # batch size train: {}'.format(args.batch_size))
-    except (AttributeError, RuntimeError) as e:
-        print('[!] Unable to load data: ' + str(e))
-        return 1
+    if args.testData:
+        testImagesDir = test_data_dir + '/'
+        testImagesList = [testImagesDir + f for f in os.listdir(testImagesDir) if os.path.isfile(testImagesDir + f)]
+        testImagesList.sort()
+        n_valid_batches = len(testImagesList)
+    else:
+        try:
+            dp = DataPrep(test_data_dir, test_data_dir)
+            n_valid_batches = int(math.ceil(dp.num_valid/args.batch_size))
+            print('[i] # test samples: {}'.format(dp.num_valid))
+            print('[i] # batch size train: {}'.format(args.batch_size))
+        except (AttributeError, RuntimeError) as e:
+            print('[!] Unable to load data: ' + str(e))
+            return 1
 
     #---------------------------------------------------------------------------
     # Create the network
     #---------------------------------------------------------------------------
     with tf.Session() as sess:
         print('[i] Uploading the model...')
-        n_valid_batches = int(math.ceil(dp.num_valid/args.batch_size))
         ucrNet = net.UnetCrfRnn(args.batch_size, args.weight_decay, args.bias_decay)
 
         init = tf.global_variables_initializer()
@@ -407,16 +415,35 @@ def predict(test_data_dir, weights_path, out_seg_dir):
         #-------------------------------------------------------------------
         # Validate
         #-------------------------------------------------------------------
-        iteration = 0
-        validation_imgs_samples = []
-        randValidBatchIdx = random.sample(range(n_valid_batches-1), 10)
-        generator = dp.valid_generator(args.batch_size, args.num_workers)
-        description = '[i] Valid '
-        for idxTest, (images, gtSegs) in enumerate(tqdm(generator, total=n_valid_batches, desc=description, unit='batches', leave=False)):
+        if args.testData:
+            description = '[i] Test '
+            for idxTest, image in enumerate(tqdm(testImagesList, total=n_valid_batches, desc=description, unit='batches', leave=False)):
 
-            if args.testData:
-                [segPrediction] = sess.run([ucrNet.segPrediction], feed_dict={ucrNet.image: images})
-            else:
+                testImg = cv2.imread(image)
+                testImg = testImg[:,:,0]
+                testImg = testImg[np.newaxis,:,:,np.newaxis].astype(np.float32)
+
+                [segPrediction] = sess.run([ucrNet.segPrediction], feed_dict={ucrNet.image: testImg})
+
+                #-------------------------------------------------------------------
+                # Dump segmented images
+                #-------------------------------------------------------------------
+                segToSave = np.zeros((segPrediction.shape[1], segPrediction.shape[2]), dtype=np.uint8)
+                segToSave[segPrediction[0] == 1] = 127
+                segToSave[segPrediction[0] == 2] = 255
+                testImageName = re.search("{}\/ct(_.+)".format(test_data_dir), image).group(1)
+                cv2.imwrite('{}/seg{}.png'.format(out_seg_dir, testImageName), segToSave)
+
+            print('[i] Done testing...')
+
+        else:
+            iteration = 0
+            validation_imgs_samples = []
+            randValidBatchIdx = random.sample(range(n_valid_batches-1), 10)
+            generator = dp.valid_generator(args.batch_size, args.num_workers)
+            description = '[i] Valid '
+            for idxTest, (images, gtSegs) in enumerate(tqdm(generator, total=n_valid_batches, desc=description, unit='batches', leave=False)):
+
                 [loss, segPrediction] = sess.run([ucrNet.loss, ucrNet.segPrediction], feed_dict={ucrNet.image: images, ucrNet.gtSeg: gtSegs})
 
                 validation_loss.add(loss)
@@ -438,19 +465,8 @@ def predict(test_data_dir, weights_path, out_seg_dir):
                     #timerStats()
 
             #-------------------------------------------------------------------
-            # Dump segmented images
+            # Write summaries
             #-------------------------------------------------------------------
-            for segNum in range(gtSegs.shape[0]):
-                segToSave = np.zeros((segPrediction.shape[1], segPrediction.shape[2]), dtype=np.uint8)
-                segToSave[segPrediction[segNum] == 1] = 127
-                segToSave[segPrediction[segNum] == 2] = 255
-                cv2.imwrite('{}/{}.png'.format(out_seg_dir, idxTest*gtSegs.shape[0]+segNum), segToSave)
-
-        #-------------------------------------------------------------------
-        # Write summaries
-        #-------------------------------------------------------------------
-        if not args.testData:
-
             validation_loss.push(iteration)
 
             summary = sess.run(merged_summary, feed_dict={ucrNet.image: images,
@@ -472,7 +488,7 @@ def predict(test_data_dir, weights_path, out_seg_dir):
 
             summary_writer.flush()
 
-        print('[i] Done testing...')
+            print('[i] Done validating...')
 
 
     return 0
