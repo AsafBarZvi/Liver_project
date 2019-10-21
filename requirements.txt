@@ -21,7 +21,7 @@ cycler==0.10.0
 dask==0.17.5
 decorator==4.1.2
 easydict==1.7
-ecdsa==0.13
+ecdsa==0.13.3
 entrypoints==0.2.2
 enum==0.4.6
 enum34==1.1.6
