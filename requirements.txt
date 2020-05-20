@@ -35,7 +35,7 @@ google-api-python-client==1.6.2
 grpcio==1.15.0
 h5py==2.8.0
 html5lib==0.9999999
-httplib2==0.10.3
+httplib2==0.18.0
 idna==2.5
 imgaug==0.2.5
 iotop==0.6
