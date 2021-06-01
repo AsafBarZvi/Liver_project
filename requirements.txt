@@ -141,7 +141,7 @@ traitlets==4.3.2
 uncompyle6==3.2.4
 Unipath==0.2.1
 uritemplate==3.0.0
-urllib3==1.13.1
+urllib3==1.26.5
 virtualenv==15.0.1
 wcwidth==0.1.7
 webencodings==0.5.1
