@@ -129,7 +129,7 @@ spark-parser==1.8.7
 subprocess32==3.2.7
 sympy==1.0
 tensorboard==1.11.0
-tensorflow-gpu==1.6.0
+tensorflow-gpu==2.5.1
 termcolor==1.1.0
 terminado==0.6
 testpath==0.3
