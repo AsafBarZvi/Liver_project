@@ -75,7 +75,7 @@ numpy==1.13.3
 oauth2client==1.5.2
 oauthlib==2.0.2
 olefile==0.44
-opencv-python==3.4.1.15
+opencv-python==4.2.0.32
 packaging==16.8
 pandas==0.19.2
 pandastable==0.10.0
