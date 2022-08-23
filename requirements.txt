@@ -62,7 +62,7 @@ meld==3.14.2
 mistune==0.7.4
 mock==2.0.0
 mpmath==0.19
-nbconvert==5.1.1
+nbconvert==6.5.1
 nbformat==4.3.0
 ndg-httpsclient==0.4.0
 netaddr==0.7.18
